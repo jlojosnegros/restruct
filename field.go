@@ -26,6 +26,7 @@ type field struct {
 	SIndex  int
 	Skip    int
 	Trivial bool
+	BitSize uint8
 }
 
 // fields represents a structure.
@@ -125,6 +126,7 @@ func fieldsFromStruct(typ reflect.Type) (result fields) {
 			SIndex:  sindex,
 			Skip:    opts.Skip,
 			Trivial: isTypeTrivial(ftyp),
+			BitSize: opts.BitSize,
 		})
 	}
 
