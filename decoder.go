@@ -21,39 +21,54 @@ type decoder struct {
 	buf     []byte
 	struc   reflect.Value
 	sfields []field
+	bitCounter uint8
 }
 
-func (d *decoder) read8() uint8 {
-	x := d.buf[0]
-	d.buf = d.buf[1:]
-	return x
+func (d *decoder) read8(f field) uint8 {
+
+	// if there is no bitfields use same behaviour
+	if d.bitCounter == 0 && f.BitSize == 0 {
+		x := d.buf[0]
+		d.buf = d.buf[1:]
+		return x
+	}
+	panic(fmt.Errorf("not implemented"))
 }
 
-func (d *decoder) read16() uint16 {
-	x := d.order.Uint16(d.buf[0:2])
-	d.buf = d.buf[2:]
-	return x
+func (d *decoder) read16(f field) uint16 {
+	if d.bitCounter == 0 && f.BitSize == 0 {
+		x := d.order.Uint16(d.buf[0:2])
+		d.buf = d.buf[2:]
+		return x
+	}
+	panic(fmt.Errorf("not implemented"))
 }
 
-func (d *decoder) read32() uint32 {
-	x := d.order.Uint32(d.buf[0:4])
-	d.buf = d.buf[4:]
-	return x
+func (d *decoder) read32(f field) uint32 {
+	if d.bitCounter == 0 && f.BitSize == 0 {
+		x := d.order.Uint32(d.buf[0:4])
+		d.buf = d.buf[4:]
+		return x
+	}
+	panic(fmt.Errorf("not implemented"))
 }
 
-func (d *decoder) read64() uint64 {
-	x := d.order.Uint64(d.buf[0:8])
-	d.buf = d.buf[8:]
-	return x
+func (d *decoder) read64(f field) uint64 {
+	if d.bitCounter == 0 && f.BitSize == 0 {
+		x := d.order.Uint64(d.buf[0:8])
+		d.buf = d.buf[8:]
+		return x
+	}
+	panic(fmt.Errorf("not implemented"))
 }
 
-func (d *decoder) readS8() int8 { return int8(d.read8()) }
+func (d *decoder) readS8(f field) int8 { return int8(d.read8(f)) }
 
-func (d *decoder) readS16() int16 { return int16(d.read16()) }
+func (d *decoder) readS16(f field) int16 { return int16(d.read16(f)) }
 
-func (d *decoder) readS32() int32 { return int32(d.read32()) }
+func (d *decoder) readS32(f field) int32 { return int32(d.read32(f)) }
 
-func (d *decoder) readS64() int64 { return int64(d.read64()) }
+func (d *decoder) readS64(f field) int64 { return int64(d.read64(f)) }
 
 func (d *decoder) readn(count int) []byte {
 	x := d.buf[0:count]
@@ -171,37 +186,37 @@ func (d *decoder) read(f field, v reflect.Value) {
 		}
 
 	case reflect.Int8:
-		v.SetInt(int64(d.readS8()))
+		v.SetInt(int64(d.readS8(f)))
 	case reflect.Int16:
-		v.SetInt(int64(d.readS16()))
+		v.SetInt(int64(d.readS16(f)))
 	case reflect.Int32:
-		v.SetInt(int64(d.readS32()))
+		v.SetInt(int64(d.readS32(f)))
 	case reflect.Int64:
-		v.SetInt(d.readS64())
+		v.SetInt(d.readS64(f))
 
 	case reflect.Uint8:
-		v.SetUint(uint64(d.read8()))
+		v.SetUint(uint64(d.read8(f)))
 	case reflect.Uint16:
-		v.SetUint(uint64(d.read16()))
+		v.SetUint(uint64(d.read16(f)))
 	case reflect.Uint32:
-		v.SetUint(uint64(d.read32()))
+		v.SetUint(uint64(d.read32(f)))
 	case reflect.Uint64:
-		v.SetUint(d.read64())
+		v.SetUint(d.read64(f))
 
 	case reflect.Float32:
-		v.SetFloat(float64(math.Float32frombits(d.read32())))
+		v.SetFloat(float64(math.Float32frombits(d.read32(f))))
 	case reflect.Float64:
-		v.SetFloat(math.Float64frombits(d.read64()))
+		v.SetFloat(math.Float64frombits(d.read64(f)))
 
 	case reflect.Complex64:
 		v.SetComplex(complex(
-			float64(math.Float32frombits(d.read32())),
-			float64(math.Float32frombits(d.read32())),
+			float64(math.Float32frombits(d.read32(f))),
+			float64(math.Float32frombits(d.read32(f))),
 		))
 	case reflect.Complex128:
 		v.SetComplex(complex(
-			math.Float64frombits(d.read64()),
-			math.Float64frombits(d.read64()),
+			math.Float64frombits(d.read64(f)),
+			math.Float64frombits(d.read64(f)),
 		))
 	}
 
