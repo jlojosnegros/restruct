@@ -17,49 +17,182 @@ type Unpacker interface {
 }
 
 type decoder struct {
-	order   binary.ByteOrder
-	buf     []byte
-	struc   reflect.Value
-	sfields []field
+	order      binary.ByteOrder
+	buf        []byte
+	struc      reflect.Value
+	sfields    []field
 	bitCounter uint8
+}
+
+func (d *decoder) readBits(f field, outputLength uint8) (output []byte) {
+	// NOTE: We can calculate outputLength but we ask it as a parameter by now
+	// outputLength := uint8(t.Expected.Type().Bits() / 8)
+
+	// NOTE: outputLength is the caller desired size independently of the data size
+	// So we can have a 3 bits data into a uint64 variable ...
+	fmt.Println("----------readBits--------")
+	fmt.Printf("incomingData: ")
+	for _, elem := range d.buf {
+		fmt.Printf("0x%X ", elem)
+	}
+	fmt.Println()
+	fmt.Println("outputLength:", outputLength)
+	output = make([]byte, outputLength)
+
+	if f.BitSize == 0 {
+		f.BitSize = uint8(f.Type.Bits())
+	}
+
+	// Case A: there is no bitfileds => Use legacy code
+	if d.bitCounter == 0 && (f.BitSize%8) == 0 {
+		fmt.Println("CASE A: NO bitfields")
+		// calculate output
+		output = d.buf[0:outputLength]
+		fmt.Println("output:", output)
+		// update buffer
+		d.buf = d.buf[outputLength:]
+		fmt.Println("rest:", d.buf)
+		// no need to update bitCounter
+		return
+	}
+
+	maskShift := f.BitSize % 8
+	var mask uint8 = (0x01 << maskShift) - 1
+	fmt.Printf("maskshift:%d\n", maskShift)
+	fmt.Printf("mask:0x%X\n", mask)
+
+	fmt.Printf("BitSize:%d\n", f.BitSize)
+	fmt.Printf("BitCounter:%d\n", d.bitCounter)
+
+	// Case B: If we just need one byte
+	if d.bitCounter+f.BitSize <= 8 {
+		fmt.Println("CASE B: Less than a byte")
+		output[len(output)-1] = (d.buf[0] >> (8 - (f.BitSize + d.bitCounter))) & mask
+		d.bitCounter = (d.bitCounter + f.BitSize) % 8
+		fmt.Println("output:", output)
+		fmt.Println("rest:", d.buf)
+		fmt.Printf("BitCounter:%d\n", d.bitCounter)
+		return
+	}
+	fmt.Println("CASE C:Complex bitfields")
+	// Case C: if we need more than one byte
+	// first of all calculate the number of actual bytes we need.
+	numBytesToUse := ((d.bitCounter + f.BitSize) / 8)
+	if (d.bitCounter+f.BitSize)%8 != 0 {
+		numBytesToUse++
+	}
+	// and check the input buffer
+	if uint8(len(d.buf)) < numBytesToUse {
+		panic(fmt.Errorf("not enought bytes: needed %d, input has %d",
+			numBytesToUse,
+			len(d.buf)))
+	}
+
+	// Calculate the actual length of the data
+	// NOTE: This depends on the number of bits, not the caller desired size
+	dataLength := f.BitSize / 8
+	if (f.BitSize % 8) != 0 {
+		dataLength++
+	}
+
+	shift := (f.BitSize - (8 - d.bitCounter)) % 8
+
+	// Copy data
+	// NOTE: As there could be a difference between data size and the client
+	// desired output size we need two different indexes
+	outputIdx := (outputLength - dataLength)
+	for idx := uint8(0); idx < dataLength; idx++ {
+		output[outputIdx] = (d.buf[idx] << shift) | (d.buf[idx+1] >> (8 - shift))
+		outputIdx++
+	}
+	// mask calculation
+
+	if maskShift != 0 {
+		var mask uint8 = (0x01 << maskShift) - 1
+		output[0] &= mask
+	}
+	// update IncomingData (use -1 due to base zero index)
+	d.buf = d.buf[numBytesToUse-1:]
+	// update BitCounter
+	d.bitCounter = (f.BitSize + d.bitCounter) % 8
+
+	fmt.Println("output:", output)
+	fmt.Println("rest:", d.buf)
+	fmt.Printf("BitCounter:%d\n", d.bitCounter)
+	return
 }
 
 func (d *decoder) read8(f field) uint8 {
 
-	// if there is no bitfields use same behaviour
-	if d.bitCounter == 0 && f.BitSize == 0 {
-		x := d.buf[0]
-		d.buf = d.buf[1:]
-		return x
+	rawdata := d.readBits(f, 1)
+	fmt.Printf("read8: rawData=")
+	for _, elem := range rawdata {
+		fmt.Printf("0x%X ", elem)
 	}
-	panic(fmt.Errorf("not implemented"))
+	fmt.Println()
+
+	return uint8(rawdata[0])
+	// if d.bitCounter == 0 && (f.BitSize%8) == 0 {
+	// 	x := d.buf[0]
+	// 	d.buf = d.buf[1:]
+	// 	return x
+	// }
+
+	//	panic(fmt.Errorf("not implemented"))
 }
 
 func (d *decoder) read16(f field) uint16 {
-	if d.bitCounter == 0 && f.BitSize == 0 {
-		x := d.order.Uint16(d.buf[0:2])
-		d.buf = d.buf[2:]
-		return x
+	rawdata := d.readBits(f, 2)
+	fmt.Printf("read16: rawData=")
+	for _, elem := range rawdata {
+		fmt.Printf("0x%X ", elem)
 	}
-	panic(fmt.Errorf("not implemented"))
+	fmt.Println()
+
+	return d.order.Uint16(rawdata)
+
+	// if d.bitCounter == 0 && f.BitSize == 0 {
+	// 	x := d.order.Uint16(d.buf[0:2])
+	// 	d.buf = d.buf[2:]
+	// 	return x
+	// }
+	// panic(fmt.Errorf("not implemented"))
 }
 
 func (d *decoder) read32(f field) uint32 {
-	if d.bitCounter == 0 && f.BitSize == 0 {
-		x := d.order.Uint32(d.buf[0:4])
-		d.buf = d.buf[4:]
-		return x
+	rawdata := d.readBits(f, 4)
+	fmt.Printf("read32: rawData=")
+	for _, elem := range rawdata {
+		fmt.Printf("0x%X ", elem)
 	}
-	panic(fmt.Errorf("not implemented"))
+	fmt.Println()
+
+	return d.order.Uint32(rawdata)
+	// if d.bitCounter == 0 && f.BitSize == 0 {
+	// 	x := d.order.Uint32(d.buf[0:4])
+	// 	d.buf = d.buf[4:]
+	// 	return x
+	// }
+	// panic(fmt.Errorf("not implemented"))
 }
 
 func (d *decoder) read64(f field) uint64 {
-	if d.bitCounter == 0 && f.BitSize == 0 {
-		x := d.order.Uint64(d.buf[0:8])
-		d.buf = d.buf[8:]
-		return x
+
+	rawdata := d.readBits(f, 8)
+	fmt.Printf("read64: rawData=")
+	for _, elem := range rawdata {
+		fmt.Printf("0x%X ", elem)
 	}
-	panic(fmt.Errorf("not implemented"))
+	fmt.Println()
+
+	return d.order.Uint64(rawdata)
+
+	// if d.bitCounter == 0 && f.BitSize == 0 {
+	// 	x := d.order.Uint64(d.buf[0:8])
+	// 	d.buf = d.buf[8:]
+	// 	return x
+	// }
+	// panic(fmt.Errorf("not implemented"))
 }
 
 func (d *decoder) readS8(f field) int8 { return int8(d.read8(f)) }

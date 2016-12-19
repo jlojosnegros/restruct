@@ -14,6 +14,20 @@ func TestUnpack(t *testing.T) {
 		data  []byte
 		value interface{}
 	}{
+		// {
+		// 	data: []byte{
+		// 		0x55, 0x55,
+		// 	},
+		// 	value: struct {
+		// 		A uint8 `struct:"uint8:3"`
+		// 		B uint8 `struct:"uint8:2"`
+		// 		C uint8 `struct:"uint8"`
+		// 	}{
+		// 		A: 2,
+		// 		B: 2,
+		// 		C: 0xAA,
+		// 	},
+		// },
 		{
 			data: []byte{
 				0x00, 0x00, 0x00, 0x01,
