@@ -20,10 +20,11 @@ type Packer interface {
 }
 
 type encoder struct {
-	order   binary.ByteOrder
-	buf     []byte
-	struc   reflect.Value
-	sfields []field
+	order      binary.ByteOrder
+	buf        []byte
+	struc      reflect.Value
+	sfields    []field
+	bitCounter uint8
 }
 
 func (e *encoder) write8(x uint8) {
