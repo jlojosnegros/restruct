@@ -22,6 +22,7 @@ package restruct
 
 import (
 	"encoding/binary"
+	"fmt"
 	"reflect"
 )
 
@@ -101,9 +102,15 @@ func Pack(order binary.ByteOrder, v interface{}) (data []byte, err error) {
 		val = val.Elem()
 	}
 	f := fieldFromType(val.Type())
+	fmt.Println("jlom: Size of data: ", f.SizeOf(val))
 	data = make([]byte, f.SizeOf(val))
-	e := encoder{order: order, buf: data}
+
+	e := encoder{order: order}
+	e.assignBuffer(data)
+	fmt.Println("2")
 	e.write(f, val)
+
+	data = e.initBuf
 
 	return
 }
