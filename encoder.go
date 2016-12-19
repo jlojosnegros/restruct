@@ -27,33 +27,33 @@ type encoder struct {
 	bitCounter uint8
 }
 
-func (e *encoder) write8(x uint8) {
+func (e *encoder) write8(f field, x uint8) {
 	e.buf[0] = x
 	e.buf = e.buf[1:]
 }
 
-func (e *encoder) write16(x uint16) {
+func (e *encoder) write16(f field, x uint16) {
 	e.order.PutUint16(e.buf[0:2], x)
 	e.buf = e.buf[2:]
 }
 
-func (e *encoder) write32(x uint32) {
+func (e *encoder) write32(f field, x uint32) {
 	e.order.PutUint32(e.buf[0:4], x)
 	e.buf = e.buf[4:]
 }
 
-func (e *encoder) write64(x uint64) {
+func (e *encoder) write64(f field, x uint64) {
 	e.order.PutUint64(e.buf[0:8], x)
 	e.buf = e.buf[8:]
 }
 
-func (e *encoder) writeS8(x int8) { e.write8(uint8(x)) }
+func (e *encoder) writeS8(f field, x int8) { e.write8(f, uint8(x)) }
 
-func (e *encoder) writeS16(x int16) { e.write16(uint16(x)) }
+func (e *encoder) writeS16(f field, x int16) { e.write16(f, uint16(x)) }
 
-func (e *encoder) writeS32(x int32) { e.write32(uint32(x)) }
+func (e *encoder) writeS32(f field, x int32) { e.write32(f, uint32(x)) }
 
-func (e *encoder) writeS64(x int64) { e.write64(uint64(x)) }
+func (e *encoder) writeS64(f field, x int64) { e.write64(f, uint64(x)) }
 
 func (e *encoder) skipn(count int) {
 	e.buf = e.buf[count:]
@@ -151,35 +151,35 @@ func (e *encoder) write(f field, v reflect.Value) {
 		e.struc = struc
 
 	case reflect.Int8:
-		e.writeS8(int8(v.Int()))
+		e.writeS8(f, int8(v.Int()))
 	case reflect.Int16:
-		e.writeS16(int16(v.Int()))
+		e.writeS16(f, int16(v.Int()))
 	case reflect.Int32:
-		e.writeS32(int32(v.Int()))
+		e.writeS32(f, int32(v.Int()))
 	case reflect.Int64:
-		e.writeS64(int64(v.Int()))
+		e.writeS64(f, int64(v.Int()))
 
 	case reflect.Uint8:
-		e.write8(uint8(v.Uint()))
+		e.write8(f, uint8(v.Uint()))
 	case reflect.Uint16:
-		e.write16(uint16(v.Uint()))
+		e.write16(f, uint16(v.Uint()))
 	case reflect.Uint32:
-		e.write32(uint32(v.Uint()))
+		e.write32(f, uint32(v.Uint()))
 	case reflect.Uint64:
-		e.write64(uint64(v.Uint()))
+		e.write64(f, uint64(v.Uint()))
 
 	case reflect.Float32:
-		e.write32(math.Float32bits(float32(v.Float())))
+		e.write32(f, math.Float32bits(float32(v.Float())))
 	case reflect.Float64:
-		e.write64(math.Float64bits(float64(v.Float())))
+		e.write64(f, math.Float64bits(float64(v.Float())))
 
 	case reflect.Complex64:
 		x := v.Complex()
-		e.write32(math.Float32bits(float32(real(x))))
-		e.write32(math.Float32bits(float32(imag(x))))
+		e.write32(f, math.Float32bits(float32(real(x))))
+		e.write32(f, math.Float32bits(float32(imag(x))))
 	case reflect.Complex128:
 		x := v.Complex()
-		e.write64(math.Float64bits(float64(real(x))))
-		e.write64(math.Float64bits(float64(imag(x))))
+		e.write64(f, math.Float64bits(float64(real(x))))
+		e.write64(f, math.Float64bits(float64(imag(x))))
 	}
 }
