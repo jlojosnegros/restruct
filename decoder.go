@@ -30,6 +30,15 @@ func (d *decoder) readBits(f field, outputLength uint8) (output []byte) {
 
 	// NOTE: outputLength is the caller desired size independently of the data size
 	// So we can have a 3 bits data into a uint64 variable ...
+	defer func() {
+		fmt.Println("----------End-readBits--------")
+		fmt.Printf("output: ")
+		for _, elem := range output {
+			fmt.Printf("0x%X ", elem)
+		}
+		fmt.Println()
+	}()
+
 	fmt.Println("----------readBits--------")
 	fmt.Printf("incomingData: ")
 	for _, elem := range d.buf {
@@ -37,88 +46,82 @@ func (d *decoder) readBits(f field, outputLength uint8) (output []byte) {
 	}
 	fmt.Println()
 	fmt.Println("outputLength:", outputLength)
+
 	output = make([]byte, outputLength)
 
 	if f.BitSize == 0 {
-		f.BitSize = uint8(f.Type.Bits())
+		// Having problems with complex64 type ... so we asume we want to read all
+		// f.BitSize = uint8(f.Type.Bits())
+		f.BitSize = 8 * outputLength
 	}
 
-	// Case A: there is no bitfileds => Use legacy code
-	if d.bitCounter == 0 && (f.BitSize%8) == 0 {
-		fmt.Println("CASE A: NO bitfields")
-		// calculate output
-		output = d.buf[0:outputLength]
-		fmt.Println("output:", output)
-		// update buffer
-		d.buf = d.buf[outputLength:]
-		fmt.Println("rest:", d.buf)
-		// no need to update bitCounter
-		return
+	// originPos: Original position of the first bit in the first byte
+	var originPos uint8 = 8 - d.bitCounter
+
+	// destPos: Destination position ( in the result ) of the first bit in the first byte
+	var destPos uint8 = f.BitSize % 8
+	if destPos == 0 {
+		destPos = 8
 	}
 
-	maskShift := f.BitSize % 8
-	var mask uint8 = (0x01 << maskShift) - 1
-	fmt.Printf("maskshift:%d\n", maskShift)
-	fmt.Printf("mask:0x%X\n", mask)
+	// numBytes: number of complete bytes to hold the result
+	var numBytes uint8 = f.BitSize / 8
 
-	fmt.Printf("BitSize:%d\n", f.BitSize)
-	fmt.Printf("BitCounter:%d\n", d.bitCounter)
+	// numBits: number of remaining bits in the first non-complete byte of the result
+	var numBits uint8 = f.BitSize % 8
 
-	// Case B: If we just need one byte
-	if d.bitCounter+f.BitSize <= 8 {
-		fmt.Println("CASE B: Less than a byte")
-		output[len(output)-1] = (d.buf[0] >> (8 - (f.BitSize + d.bitCounter))) & mask
-		d.bitCounter = (d.bitCounter + f.BitSize) % 8
-		fmt.Println("output:", output)
-		fmt.Println("rest:", d.buf)
-		fmt.Printf("BitCounter:%d\n", d.bitCounter)
-		return
-	}
-	fmt.Println("CASE C:Complex bitfields")
-	// Case C: if we need more than one byte
-	// first of all calculate the number of actual bytes we need.
-	numBytesToUse := ((d.bitCounter + f.BitSize) / 8)
-	if (d.bitCounter+f.BitSize)%8 != 0 {
-		numBytesToUse++
-	}
-	// and check the input buffer
-	if uint8(len(d.buf)) < numBytesToUse {
-		panic(fmt.Errorf("not enought bytes: needed %d, input has %d",
-			numBytesToUse,
-			len(d.buf)))
+	// number of positions we have to shift the bytes to get the result
+	var shift uint8 = (uint8(math.Abs(float64(originPos - destPos)))) % 8
+
+	var outputInitialIdx uint8 = outputLength - numBytes
+	if numBits > 0 {
+		outputInitialIdx = outputInitialIdx - 1
 	}
 
-	// Calculate the actual length of the data
-	// NOTE: This depends on the number of bits, not the caller desired size
-	dataLength := f.BitSize / 8
-	if (f.BitSize % 8) != 0 {
-		dataLength++
+
+	if originPos < destPos { // shift left
+		var idx uint8 = 0
+		for outIdx := outputInitialIdx; outIdx < outputLength; outIdx++ {
+			// TODO: Control the number of bytes of d.buf ... we need to read ahead
+			var carry uint8 = d.buf[idx+1] >> (8 - shift)
+			output[outIdx] = (d.buf[idx] << shift) | carry
+			idx++
+		}
+
+	} else { // originPos >= destPos => shift right
+		var idx uint8 = 0
+
+		// carry : is a little bit tricky in this case because of the first case
+		// when idx == 0 and there is no carry at all
+		carry := func(idx uint8) uint8 {
+			if idx == 0 {
+				return 0x00
+			}
+			return (d.buf[idx-1] << (8 - shift))
+		}
+
+		for outIdx := outputInitialIdx; outIdx < outputLength; outIdx++ {
+			output[outIdx] = (d.buf[idx] >> shift) | carry(idx)
+			idx++
+		}
 	}
 
-	shift := (f.BitSize - (8 - d.bitCounter)) % 8
+	// here the output is calculated ... but the first byte may have some extra bits
+	// therefore we apply a mask to erase those unaddressable bits
+	output[outputInitialIdx] &= ((0x01 << destPos) - 1)
 
-	// Copy data
-	// NOTE: As there could be a difference between data size and the client
-	// desired output size we need two different indexes
-	outputIdx := (outputLength - dataLength)
-	for idx := uint8(0); idx < dataLength; idx++ {
-		output[outputIdx] = (d.buf[idx] << shift) | (d.buf[idx+1] >> (8 - shift))
-		outputIdx++
+	// now we need to update the head of the incoming buffer and the bitCounter
+	d.bitCounter = (d.bitCounter + f.BitSize) % 8
+
+	// move the head to the next non-complete byte used
+	headerUpdate := func() uint8 {
+		if (d.bitCounter == 0) && ((f.BitSize % 8) != 0) {
+			return (numBytes + 1)
+		}
+		return numBytes
 	}
-	// mask calculation
 
-	if maskShift != 0 {
-		var mask uint8 = (0x01 << maskShift) - 1
-		output[0] &= mask
-	}
-	// update IncomingData (use -1 due to base zero index)
-	d.buf = d.buf[numBytesToUse-1:]
-	// update BitCounter
-	d.bitCounter = (f.BitSize + d.bitCounter) % 8
-
-	fmt.Println("output:", output)
-	fmt.Println("rest:", d.buf)
-	fmt.Printf("BitCounter:%d\n", d.bitCounter)
+	d.buf = d.buf[headerUpdate():]
 	return
 }
 
