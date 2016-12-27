@@ -35,91 +35,177 @@ func (e *encoder) assignBuffer(in []byte) {
 }
 
 func (e *encoder) writeBits(f field, inBuf []byte) {
-	// hacemos la salida del tama;o esperado por el cliente
 	defer func() {
-		fmt.Printf("currentOut %#v\n", e.initBuf)
+
+		fmt.Printf("output: ")
+		for _, elem := range e.buf {
+			fmt.Printf("0x%X ", elem)
+		}
+		fmt.Println()
+		fmt.Println("----------End-writeBits--------")
+		fmt.Println()
 	}()
-	fmt.Println("======writeBits=====")
-	fmt.Printf("inputSize: %#v\n", len(inBuf))
-	fmt.Printf("inBuf: %#v\n", inBuf)
+
+	fmt.Println("----------writeBits--------")
+	fmt.Printf("incomingData: ")
+	for _, elem := range inBuf {
+		fmt.Printf("0x%X ", elem)
+	}
+	fmt.Println()
+
+	var inputLength uint8 = uint8(len(inBuf))
+	fmt.Println("inputLength:", inputLength)
 
 	if f.BitSize == 0 {
+		fmt.Println("Type: ", f.Type.String())
+		// Having problems with complex64 type ... so we asume we want to read all
 		f.BitSize = uint8(f.Type.Bits())
 	}
-	fmt.Printf("bitCount: %#v\n", e.bitCounter)
-	fmt.Printf("bitSize: %#v\n", f.BitSize)
 
-	// Case A: There is no bitfields
-	if (e.bitCounter + (f.BitSize % 8)) == 0 {
-		fmt.Println("CASE A")
-		copy(e.buf, inBuf)
+	fmt.Println("BitSize: ", f.BitSize)
+	fmt.Println("BitCounter: ", e.bitCounter)
 
-		e.buf = e.buf[len(inBuf):]
 
-		return
+	// destPos: Destination position ( in the result ) of the first bit in the first byte
+	var destPos uint8 = 8 - e.bitCounter
+	fmt.Println("DestinationPost: ", destPos)
+
+
+	// originPos: Original position of the first bit in the first byte
+	var originPos uint8 = f.BitSize % 8
+	if originPos == 0 {
+		originPos = 8
+	}
+	fmt.Println("OriginPos: ", originPos)
+
+
+	// numBytes: number of complete bytes to hold the result
+	var numBytes uint8 = f.BitSize / 8
+	fmt.Println("nBytes: ", numBytes)
+
+	// numBits: number of remaining bits in the first non-complete byte of the result
+	var numBits uint8 = f.BitSize % 8
+	fmt.Println("nBits: ", numBits)
+
+	// number of positions we have to shift the bytes to get the result
+	var shift uint8
+	if originPos > destPos {
+		shift = originPos - destPos
+	} else {
+		shift = destPos - originPos
+	}
+	shift = shift % 8
+	//var shift uint8 = (uint8(math.Abs(float64(originPos - destPos)))) % 8
+	fmt.Println("Shift: ", shift)
+
+	var inputInitialIdx uint8 = inputLength - numBytes
+	if numBits > 0 {
+		inputInitialIdx = inputInitialIdx - 1
+	}
+	fmt.Println("inputInitialIdx: ", inputInitialIdx)
+
+	fmt.Println("End of parameters----")
+
+	if originPos < destPos {
+		// shift left
+		fmt.Println("pOrig < pDst --> Shitf LEFT")
+		carry := func(idx uint8) uint8 {
+			if (idx + 1) < inputLength {
+				fmt.Printf("in[%d+1] = 0x%X\n", idx, inBuf[idx + 1])
+				fmt.Printf("(8-shift) = %d\n", (8 - shift))
+				return (inBuf[idx + 1] >> (8 - shift))
+			}
+			return 0x00
+
+		}
+		mask := func(idx uint8) uint8{
+			if idx == 0 {
+				return (0x01<<destPos)-1
+			}
+			return 0xFF
+		}
+		var idx uint8 = 0
+		for inIdx := inputInitialIdx; inIdx < inputLength; inIdx++ {
+			fmt.Printf("inBuf[inIdx:%d] = 0x%X\n", inIdx,inBuf[inIdx])
+			fmt.Printf("inBuf[inIdx:%d] << shift:%d =  0x%X\n", inIdx,shift,(inBuf[inIdx] << shift))
+			fmt.Printf("carry[inIdx:%d] = 0x%X\n", inIdx,carry(inIdx))
+			fmt.Printf("inBuf[inIdx:%d] << shift:%d ) | carry(inIdx:%d) =  0x%X\n", inIdx,shift,inIdx,(inBuf[inIdx] << shift) | carry(inIdx))
+			fmt.Printf("mask[idx:%d] = 0x%X\n", idx,mask(idx))
+			fmt.Printf("(inBuf[inIdx:%d] >> shift:%d ) | carry(inIdx:%d) ) & mask(idx:%d) =  0x%X\n", inIdx,shift,inIdx,idx,((inBuf[inIdx] << shift) | carry(inIdx) ) & mask(idx))
+			fmt.Printf("Before e.buf[idx:%d] = 0x%X\n", idx,e.buf[idx])
+			e.buf[idx] |= ((inBuf[inIdx] << shift) | carry(inIdx) ) & mask(idx)
+			fmt.Printf("After  e.buf[idx:%d] = 0x%X\n", idx,e.buf[idx])
+			idx++
+		}
+
+	} else {
+		// originPos >= destPos => shift right
+		fmt.Println("pOrig >= pDst --> Shitf RIGHT")
+		var idx uint8 = 0
+		// carry : is a little bit tricky in this case because of the first case
+		// when idx == 0 and there is no carry at all
+		carry := func(idx uint8) uint8 {
+			if idx == 0 {
+				fmt.Println("carry(idx==0): 0x00")
+				return 0x00
+			}
+
+			fmt.Printf("in[%d-1] = 0x%X\n", idx, inBuf[idx-1])
+			fmt.Printf("(8-shift) = %d\n", (8 - shift))
+			fmt.Printf("carry(idx:%d): 0x%X\n",idx, (inBuf[idx-1] << (8 - shift)))
+			return (inBuf[idx-1] << (8 - shift))
+		}
+		mask := func(idx uint8) uint8{
+			if idx == 0 {
+				fmt.Printf("mask(idx==0): 0x%X\n", (0x01<<destPos)-1)
+				return (0x01<<destPos)-1
+			}
+			fmt.Printf("mask(idx==%d): 0x%X\n", idx,0xFF)
+			return 0xFF
+		}
+		inIdx := inputInitialIdx
+		for ; inIdx < inputLength; inIdx++ {
+			//note: Should the mask be done BEFORE the OR with carry?
+			fmt.Printf("inBuf[inIdx:%d] = 0x%X\n", inIdx,inBuf[inIdx])
+			fmt.Printf("inBuf[inIdx:%d] >> shift:%d =  0x%X\n", inIdx,shift,(inBuf[inIdx] >> shift))
+			fmt.Printf("carry[inIdx:%d] = 0x%X\n", inIdx,carry(inIdx))
+			fmt.Printf("inBuf[inIdx:%d] >> shift:%d ) | carry(inIdx:%d) =  0x%X\n", inIdx,shift,inIdx,(inBuf[inIdx] >> shift) | carry(inIdx))
+			fmt.Printf("mask[idx:%d] = 0x%X\n", idx,mask(idx))
+			fmt.Printf("(inBuf[inIdx:%d] >> shift:%d ) | carry(inIdx:%d) ) & mask(idx:%d) =  0x%X\n", inIdx,shift,inIdx,idx,((inBuf[inIdx] >> shift) | carry(inIdx)) & mask(idx))
+			fmt.Printf("Before e.buf[idx:%d] = 0x%X\n", idx,e.buf[idx])
+			e.buf[idx] |= ((inBuf[inIdx] >> shift) | carry(inIdx)) & mask(idx)
+			fmt.Printf("After  e.buf[idx:%d] = 0x%X\n", idx,e.buf[idx])
+			idx++
+		}
+		fmt.Println("RIGHT AFter loop ")
+		fmt.Println("inIdx: ", inIdx)
+		fmt.Println("idx: ", idx)
+		if ((e.bitCounter + f.BitSize) % 8) > 0 {
+			e.buf[idx] |= carry(inIdx)
+		}
 	}
 
-	if (e.bitCounter + f.BitSize) <= 8 {
-		fmt.Println("CASE B")
-		fmt.Printf("in: 0x%X\n", inBuf[0])
-		var mask uint8 = (0x01 << f.BitSize) - 1
-		fmt.Printf("mask: 0x%X\n", mask)
-		fmt.Printf("in shifted: 0x%X\n", inBuf[0]>>e.bitCounter)
 
-		e.buf[0] |= (inBuf[0] & mask) << (8 - (e.bitCounter + f.BitSize))
+	fmt.Println("loop end ---")
 
-		fmt.Printf("out[0]: 0x%X\n", e.buf[0])
-		e.bitCounter = (e.bitCounter + f.BitSize) % 8
-		fmt.Printf("bitCount(new): 0x%X\n", e.bitCounter)
+        //now we should update buffer and bitCounter
+	fmt.Println("Updating ... ")
 
-		return
+	fmt.Println("Before -> BitCounter: ", e.bitCounter)
+	e.bitCounter = (e.bitCounter + f.BitSize) % 8
+	fmt.Println("After -> BitCounter: ", e.bitCounter)
+
+	// move the head to the next non-complete byte used
+	headerUpdate := func() uint8 {
+		if (e.bitCounter == 0) && ((f.BitSize % 8) != 0) {
+			return (numBytes + 1)
+		}
+		return numBytes
 	}
 
-	fmt.Println("CASE C")
-	nbytes := (e.bitCounter + f.BitSize) / 8
-	nbits := (e.bitCounter + f.BitSize) % 8
+	fmt.Println("Header update: ", headerUpdate())
+	e.buf = e.buf[headerUpdate():]
 
-	fmt.Printf("nbytes: %#v\n", nbytes)
-	fmt.Printf("nbits: %#v\n", nbits)
-
-	var shift uint8 = e.bitCounter
-	fmt.Printf("shift: %#v\n", shift)
-
-	// var maskShift uint8 = 8 - shift
-	// fmt.Printf("maskShift: %#v\n", maskShift)
-
-	var carryShift uint8 = (8 - shift)
-	fmt.Printf("carryShift: %#v\n", carryShift)
-
-	var carryMask uint8 = (0x01 << shift) - 1
-	fmt.Printf("carryMask: 0x%X\n", carryMask)
-	//	var mask uint8 = (0x01 << maskShift) - 1
-	//	fmt.Printf("mask: 0x%X\n", mask)
-
-	var carry uint8 = 0
-	fmt.Println("bucle")
-	var outIdx uint8 = 0
-	for ; outIdx < nbytes; outIdx++ {
-		fmt.Printf("in[%d]: 0x%X\n", outIdx, inBuf[outIdx])
-		fmt.Printf("carry: 0x%X\n", carry)
-		fmt.Printf("out[%d]: 0x%X\n", outIdx, e.buf[outIdx])
-		e.buf[outIdx] |= (inBuf[outIdx] >> shift) | carry
-		fmt.Printf("out[%d]: 0x%X\n", outIdx, e.buf[outIdx])
-		carry = (inBuf[outIdx] & carryMask) << carryShift
-		fmt.Printf("new carry: 0x%X\n", carry)
-	}
-	fmt.Println("fin bucle: ", outIdx)
-
-	if nbits > 0 {
-		e.buf[outIdx] = carry
-		fmt.Printf("out[%d]: 0x%X\n", outIdx, e.buf[outIdx])
-	}
-
-	// update buffer
-	fmt.Printf("outbuf: %#v\n", e.buf)
-	e.buf = e.buf[nbytes:]
-	fmt.Printf("outbuf: %#v\n", e.buf)
-	e.bitCounter = nbits
 	return
 }
 
