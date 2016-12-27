@@ -15,7 +15,7 @@ func TestUnpack(t *testing.T) {
 		data  []byte
 		value interface{}
 	}{
-		{
+		/*{
 			data: []byte{
 				0x55, 0x55,
 			},
@@ -85,7 +85,7 @@ func TestUnpack(t *testing.T) {
 					{V1: 3, V2: 4},
 				},
 			},
-		},
+		},*/
 		{
 			data: []byte{
 				0x00, 0x00, 0x00, 0x00,
@@ -158,7 +158,7 @@ func TestUnpack(t *testing.T) {
 				Message:    "やった！",
 			},
 		},
-		{
+		/*{
 			data: []byte{
 				0x00, 0x00, 0x00, 0x04,
 				0xf0, 0x9f, 0x91, 0x8c,
@@ -228,7 +228,7 @@ func TestUnpack(t *testing.T) {
 			}{
 				Ints: []uint16{1, 2, 3},
 			},
-		},
+		},*/
 	}
 
 	for _, test := range tests {
