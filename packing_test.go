@@ -87,6 +87,17 @@ func TestUnpack(t *testing.T) {
 			},
 		},*/
 		{
+		data: []byte {
+			0x3e, 0x00, 0x00, 0x00,
+			0x3f, 0x80, 0x00, 0x00,
+		},
+			value: struct {
+				c64 complex64
+			} {
+				c64: complex(0.125, 1.0),
+			},
+		},
+		/*{
 			data: []byte{
 				0x00, 0x00, 0x00, 0x00,
 				0x00, 0x00, 0x00, 0x02,
@@ -157,7 +168,7 @@ func TestUnpack(t *testing.T) {
 				AnInt64:    -256,
 				Message:    "やった！",
 			},
-		},
+		},*/
 		/*{
 			data: []byte{
 				0x00, 0x00, 0x00, 0x04,
