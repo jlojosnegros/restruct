@@ -59,7 +59,8 @@ func (e *encoder) writeBits(f field, inBuf []byte) {
 	if f.BitSize == 0 {
 		fmt.Println("Type: ", f.Type.String())
 		// Having problems with complex64 type ... so we asume we want to read all
-		f.BitSize = uint8(f.Type.Bits())
+		//f.BitSize = uint8(f.Type.Bits())
+		f.BitSize = 8 * inputLength
 	}
 
 	fmt.Println("BitSize: ", f.BitSize)
