@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+
 )
 
 // Unpacker is a type capable of unpacking a binary representation of itself
@@ -25,91 +26,47 @@ type decoder struct {
 }
 
 func (d *decoder) readBits(f field, outputLength uint8) (output []byte) {
-	// NOTE: We can calculate outputLength but we ask it as a parameter by now
-	// outputLength := uint8(t.Expected.Type().Bits() / 8)
-
-	// NOTE: outputLength is the caller desired size independently of the data size
-	// So we can have a 3 bits data into a uint64 variable ...
-	defer func() {
-
-		fmt.Printf("output: ")
-		for _, elem := range output {
-			fmt.Printf("0x%X ", elem)
-		}
-		fmt.Println()
-		fmt.Println("----------End-readBits--------")
-		fmt.Println()
-	}()
-
-	fmt.Println("----------readBits--------")
-	fmt.Printf("incomingData: ")
-	for _, elem := range d.buf {
-		fmt.Printf("0x%X ", elem)
-	}
-	fmt.Println()
-	fmt.Println("outputLength:", outputLength)
 
 	output = make([]byte, outputLength)
 
 	if f.BitSize == 0 {
-		fmt.Println("Type: ", f.Type.String())
 		// Having problems with complex64 type ... so we asume we want to read all
 		// f.BitSize = uint8(f.Type.Bits())
 		f.BitSize = 8 * outputLength
 	}
 
-	fmt.Println("BitSize: ", f.BitSize)
-	fmt.Println("BitCounter: ", d.bitCounter)
-
 	// originPos: Original position of the first bit in the first byte
 	var originPos uint8 = 8 - d.bitCounter
-	fmt.Println("OriginPos: ", originPos)
 
 	// destPos: Destination position ( in the result ) of the first bit in the first byte
 	var destPos uint8 = f.BitSize % 8
 	if destPos == 0 {
 		destPos = 8
 	}
-	fmt.Println("DestinationPost: ", destPos)
 
 	// numBytes: number of complete bytes to hold the result
 	var numBytes uint8 = f.BitSize / 8
-	fmt.Println("nBytes: ", numBytes)
 
 	// numBits: number of remaining bits in the first non-complete byte of the result
 	var numBits uint8 = f.BitSize % 8
-	fmt.Println("nBits: ", numBits)
 
 	// number of positions we have to shift the bytes to get the result
 	var shift uint8 = (uint8(math.Abs(float64(originPos - destPos)))) % 8
-	fmt.Println("Shift: ", shift)
 
 	var outputInitialIdx uint8 = outputLength - numBytes
 	if numBits > 0 {
 		outputInitialIdx = outputInitialIdx - 1
 	}
-	fmt.Println("OutputInitialIdx: ", outputInitialIdx)
-
-	fmt.Println("End of parameters----")
 
 	if originPos < destPos { // shift left
-		fmt.Println("pOrig < pDst --> Shitf LEFT")
 		var idx uint8 = 0
 		for outIdx := outputInitialIdx; outIdx < outputLength; outIdx++ {
 			// TODO: Control the number of bytes of d.buf ... we need to read ahead
 			var carry uint8 = d.buf[idx+1] >> (8 - shift)
-			fmt.Printf("in[%d+1] = 0x%X\n", idx, d.buf[idx+1])
-			fmt.Printf("(8-shift) = %d\n", (8 - shift))
-			fmt.Printf("Carry[%d] = 0x%X\n", idx, carry)
 			output[outIdx] = (d.buf[idx] << shift) | carry
-			fmt.Printf("in[%d] = 0x%X\n", idx, d.buf[idx])
-			fmt.Printf("in[%d] << shift = 0x%X\n", idx, (d.buf[idx] << shift))
-			fmt.Printf("output[%d] = (d.buf[%d] << shift) | carry = 0x%X\n", outIdx, idx, output[outIdx])
 			idx++
 		}
-
 	} else { // originPos >= destPos => shift right
-		fmt.Println("pOrig >= pDst --> Shitf RIGHT")
 		var idx uint8 = 0
 
 		// carry : is a little bit tricky in this case because of the first case
@@ -118,35 +75,21 @@ func (d *decoder) readBits(f field, outputLength uint8) (output []byte) {
 			if idx == 0 {
 				return 0x00
 			}
-			fmt.Printf("in[%d-1] = 0x%X\n", idx, d.buf[idx-1])
-			fmt.Printf("(8-shift) = %d\n", (8 - shift))
 			return (d.buf[idx-1] << (8 - shift))
 		}
 
 		for outIdx := outputInitialIdx; outIdx < outputLength; outIdx++ {
-
-			fmt.Printf("Carry[%d] = 0x%X\n", idx, carry(idx))
 			output[outIdx] = (d.buf[idx] >> shift) | carry(idx)
-			fmt.Printf("in[%d] = 0x%X\n", idx, d.buf[idx])
-			fmt.Printf("in[%d] >> shift = 0x%X\n", idx, (d.buf[idx] >> shift))
-			fmt.Printf("output[%d] = (d.buf[%d] >> shift) | carry = 0x%X\n", outIdx, idx, output[outIdx])
 			idx++
 		}
 	}
-	fmt.Println("loop end ---")
+
 	// here the output is calculated ... but the first byte may have some extra bits
 	// therefore we apply a mask to erase those unaddressable bits
-	fmt.Printf("mask =  0x%X\n", (0x01<<destPos)-1)
-	fmt.Printf("Before-> output[%d] =  0x%X\n", outputInitialIdx, output[outputInitialIdx])
 	output[outputInitialIdx] &= ((0x01 << destPos) - 1)
-	fmt.Printf("After-> output[%d] =  0x%X\n", outputInitialIdx, output[outputInitialIdx])
-
-	fmt.Println("Updating ... ")
 
 	// now we need to update the head of the incoming buffer and the bitCounter
-	fmt.Println("Before -> BitCounter: ", d.bitCounter)
 	d.bitCounter = (d.bitCounter + f.BitSize) % 8
-	fmt.Println("After -> BitCounter: ", d.bitCounter)
 
 	// move the head to the next non-complete byte used
 	headerUpdate := func() uint8 {
@@ -156,109 +99,50 @@ func (d *decoder) readBits(f field, outputLength uint8) (output []byte) {
 		return numBytes
 	}
 
-	fmt.Println("Header update: ", headerUpdate())
 	d.buf = d.buf[headerUpdate():]
 
 	return
 }
 
 func (d *decoder) read8(f field) uint8 {
-	fmt.Println("read8:")
 	rawdata := d.readBits(f, 1)
-	fmt.Printf("read8: rawData=")
-	for _, elem := range rawdata {
-		fmt.Printf("0x%X ", elem)
-	}
-	fmt.Println()
-
 	return uint8(rawdata[0])
-	// if d.bitCounter == 0 && (f.BitSize%8) == 0 {
-	// 	x := d.buf[0]
-	// 	d.buf = d.buf[1:]
-	// 	return x
-	// }
-
-	//	panic(fmt.Errorf("not implemented"))
 }
 
 func (d *decoder) read16(f field) uint16 {
-	fmt.Println("read16:")
 	rawdata := d.readBits(f, 2)
-	fmt.Printf("read16: rawData=")
-	for _, elem := range rawdata {
-		fmt.Printf("0x%X ", elem)
-	}
-	fmt.Println()
-
 	return d.order.Uint16(rawdata)
-
-	// if d.bitCounter == 0 && f.BitSize == 0 {
-	// 	x := d.order.Uint16(d.buf[0:2])
-	// 	d.buf = d.buf[2:]
-	// 	return x
-	// }
-	// panic(fmt.Errorf("not implemented"))
 }
 
 func (d *decoder) read32(f field) uint32 {
-	fmt.Println("read32:")
 	rawdata := d.readBits(f, 4)
-	fmt.Printf("read32: rawData=")
-	for _, elem := range rawdata {
-		fmt.Printf("0x%X ", elem)
-	}
-	fmt.Println()
-
 	return d.order.Uint32(rawdata)
-	// if d.bitCounter == 0 && f.BitSize == 0 {
-	// 	x := d.order.Uint32(d.buf[0:4])
-	// 	d.buf = d.buf[4:]
-	// 	return x
-	// }
-	// panic(fmt.Errorf("not implemented"))
 }
 
 func (d *decoder) read64(f field) uint64 {
-	fmt.Println("read64:")
 	rawdata := d.readBits(f, 8)
-	fmt.Printf("read64: rawData=")
-	for _, elem := range rawdata {
-		fmt.Printf("0x%X ", elem)
-	}
-	fmt.Println()
-
 	return d.order.Uint64(rawdata)
-
-	// if d.bitCounter == 0 && f.BitSize == 0 {
-	// 	x := d.order.Uint64(d.buf[0:8])
-	// 	d.buf = d.buf[8:]
-	// 	return x
-	// }
-	// panic(fmt.Errorf("not implemented"))
 }
 
-func (d *decoder) readS8(f field) int8 { fmt.Println("readS8:"); return int8(d.read8(f)) }
+func (d *decoder) readS8(f field) int8 { return int8(d.read8(f)) }
 
-func (d *decoder) readS16(f field) int16 { fmt.Println("readS16:"); return int16(d.read16(f)) }
+func (d *decoder) readS16(f field) int16 { return int16(d.read16(f)) }
 
-func (d *decoder) readS32(f field) int32 { fmt.Println("readS32:"); return int32(d.read32(f)) }
+func (d *decoder) readS32(f field) int32 { return int32(d.read32(f)) }
 
-func (d *decoder) readS64(f field) int64 { fmt.Println("readS64:"); return int64(d.read64(f)) }
+func (d *decoder) readS64(f field) int64 { return int64(d.read64(f)) }
 
 func (d *decoder) readn(count int) []byte {
-	fmt.Println("readn:", count)
 	x := d.buf[0:count]
 	d.buf = d.buf[count:]
 	return x
 }
 
 func (d *decoder) skipn(count int) {
-	fmt.Println("skipn:", count)
 	d.buf = d.buf[count:]
 }
 
 func (d *decoder) skip(f field, v reflect.Value) {
-	fmt.Println("skip:")
 	d.skipn(f.SizeOf(v))
 }
 

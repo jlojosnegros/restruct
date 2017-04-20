@@ -254,24 +254,17 @@ func TestUnpack(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		fmt.Println("--==** **==--")
 		v := reflect.New(reflect.TypeOf(test.value))
 
 		// Test unpacking
-		fmt.Println("-- unpack --")
 		err := Unpack(test.data, binary.BigEndian, v.Interface())
-		fmt.Println("-- end unpack --")
 		assert.Nil(t, err)
 		assert.Equal(t, test.value, v.Elem().Interface())
-		fmt.Println("-- end unpack assert --")
+
 		// Test packing
-		fmt.Println("-- pack --")
 		data, err := Pack(binary.BigEndian, v.Interface())
-		fmt.Println("-- end pack --")
 		assert.Nil(t, err)
 		assert.Equal(t, test.data, data)
-		fmt.Println("-- end pack assert --")
-
 	}
 }
 
@@ -299,13 +292,9 @@ func TestUnpackBrokenSizeOf(t *testing.T) {
 	}
 
 	// Test unpacking
-	fmt.Println("1")
 	err := Unpack(data, binary.BigEndian, &s)
-	fmt.Println("11")
 	assert.NotNil(t, err)
-	fmt.Println("111")
 	assert.Equal(t, "unsupported sizeof type string", err.Error())
-	fmt.Println("1111")
 
 	// Test packing
 	_, err = Pack(binary.BigEndian, &s)

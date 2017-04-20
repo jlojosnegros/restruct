@@ -35,58 +35,28 @@ func (e *encoder) assignBuffer(in []byte) {
 }
 
 func (e *encoder) writeBits(f field, inBuf []byte) {
-	defer func() {
-
-		fmt.Printf("output: ")
-		for _, elem := range e.buf {
-			fmt.Printf("0x%X ", elem)
-		}
-		fmt.Println()
-		fmt.Println("----------End-writeBits--------")
-		fmt.Println()
-	}()
-
-	fmt.Println("----------writeBits--------")
-	fmt.Printf("incomingData: ")
-	for _, elem := range inBuf {
-		fmt.Printf("0x%X ", elem)
-	}
-	fmt.Println()
 
 	var inputLength uint8 = uint8(len(inBuf))
-	fmt.Println("inputLength:", inputLength)
 
 	if f.BitSize == 0 {
-		fmt.Println("Type: ", f.Type.String())
 		// Having problems with complex64 type ... so we asume we want to read all
 		//f.BitSize = uint8(f.Type.Bits())
 		f.BitSize = 8 * inputLength
 	}
-
-	fmt.Println("BitSize: ", f.BitSize)
-	fmt.Println("BitCounter: ", e.bitCounter)
-
-
 	// destPos: Destination position ( in the result ) of the first bit in the first byte
 	var destPos uint8 = 8 - e.bitCounter
-	fmt.Println("DestinationPost: ", destPos)
-
 
 	// originPos: Original position of the first bit in the first byte
 	var originPos uint8 = f.BitSize % 8
 	if originPos == 0 {
 		originPos = 8
 	}
-	fmt.Println("OriginPos: ", originPos)
-
 
 	// numBytes: number of complete bytes to hold the result
 	var numBytes uint8 = f.BitSize / 8
-	fmt.Println("nBytes: ", numBytes)
 
 	// numBits: number of remaining bits in the first non-complete byte of the result
 	var numBits uint8 = f.BitSize % 8
-	fmt.Println("nBits: ", numBits)
 
 	// number of positions we have to shift the bytes to get the result
 	var shift uint8
@@ -96,24 +66,16 @@ func (e *encoder) writeBits(f field, inBuf []byte) {
 		shift = destPos - originPos
 	}
 	shift = shift % 8
-	//var shift uint8 = (uint8(math.Abs(float64(originPos - destPos)))) % 8
-	fmt.Println("Shift: ", shift)
 
 	var inputInitialIdx uint8 = inputLength - numBytes
 	if numBits > 0 {
 		inputInitialIdx = inputInitialIdx - 1
 	}
-	fmt.Println("inputInitialIdx: ", inputInitialIdx)
-
-	fmt.Println("End of parameters----")
 
 	if originPos < destPos {
 		// shift left
-		fmt.Println("pOrig < pDst --> Shitf LEFT")
 		carry := func(idx uint8) uint8 {
 			if (idx + 1) < inputLength {
-				fmt.Printf("in[%d+1] = 0x%X\n", idx, inBuf[idx + 1])
-				fmt.Printf("(8-shift) = %d\n", (8 - shift))
 				return (inBuf[idx + 1] >> (8 - shift))
 			}
 			return 0x00
@@ -127,74 +89,40 @@ func (e *encoder) writeBits(f field, inBuf []byte) {
 		}
 		var idx uint8 = 0
 		for inIdx := inputInitialIdx; inIdx < inputLength; inIdx++ {
-			fmt.Printf("inBuf[inIdx:%d] = 0x%X\n", inIdx,inBuf[inIdx])
-			fmt.Printf("inBuf[inIdx:%d] << shift:%d =  0x%X\n", inIdx,shift,(inBuf[inIdx] << shift))
-			fmt.Printf("carry[inIdx:%d] = 0x%X\n", inIdx,carry(inIdx))
-			fmt.Printf("inBuf[inIdx:%d] << shift:%d ) | carry(inIdx:%d) =  0x%X\n", inIdx,shift,inIdx,(inBuf[inIdx] << shift) | carry(inIdx))
-			fmt.Printf("mask[idx:%d] = 0x%X\n", idx,mask(idx))
-			fmt.Printf("(inBuf[inIdx:%d] >> shift:%d ) | carry(inIdx:%d) ) & mask(idx:%d) =  0x%X\n", inIdx,shift,inIdx,idx,((inBuf[inIdx] << shift) | carry(inIdx) ) & mask(idx))
-			fmt.Printf("Before e.buf[idx:%d] = 0x%X\n", idx,e.buf[idx])
 			e.buf[idx] |= ((inBuf[inIdx] << shift) | carry(inIdx) ) & mask(idx)
-			fmt.Printf("After  e.buf[idx:%d] = 0x%X\n", idx,e.buf[idx])
 			idx++
 		}
 
 	} else {
 		// originPos >= destPos => shift right
-		fmt.Println("pOrig >= pDst --> Shitf RIGHT")
 		var idx uint8 = 0
 		// carry : is a little bit tricky in this case because of the first case
 		// when idx == 0 and there is no carry at all
 		carry := func(idx uint8) uint8 {
 			if idx == 0 {
-				fmt.Println("carry(idx==0): 0x00")
 				return 0x00
 			}
-
-			fmt.Printf("in[%d-1] = 0x%X\n", idx, inBuf[idx-1])
-			fmt.Printf("(8-shift) = %d\n", (8 - shift))
-			fmt.Printf("carry(idx:%d): 0x%X\n",idx, (inBuf[idx-1] << (8 - shift)))
 			return (inBuf[idx-1] << (8 - shift))
 		}
 		mask := func(idx uint8) uint8{
 			if idx == 0 {
-				fmt.Printf("mask(idx==0): 0x%X\n", (0x01<<destPos)-1)
 				return (0x01<<destPos)-1
 			}
-			fmt.Printf("mask(idx==%d): 0x%X\n", idx,0xFF)
 			return 0xFF
 		}
 		inIdx := inputInitialIdx
 		for ; inIdx < inputLength; inIdx++ {
 			//note: Should the mask be done BEFORE the OR with carry?
-			fmt.Printf("inBuf[inIdx:%d] = 0x%X\n", inIdx,inBuf[inIdx])
-			fmt.Printf("inBuf[inIdx:%d] >> shift:%d =  0x%X\n", inIdx,shift,(inBuf[inIdx] >> shift))
-			fmt.Printf("carry[inIdx:%d] = 0x%X\n", inIdx,carry(inIdx))
-			fmt.Printf("inBuf[inIdx:%d] >> shift:%d ) | carry(inIdx:%d) =  0x%X\n", inIdx,shift,inIdx,(inBuf[inIdx] >> shift) | carry(inIdx))
-			fmt.Printf("mask[idx:%d] = 0x%X\n", idx,mask(idx))
-			fmt.Printf("(inBuf[inIdx:%d] >> shift:%d ) | carry(inIdx:%d) ) & mask(idx:%d) =  0x%X\n", inIdx,shift,inIdx,idx,((inBuf[inIdx] >> shift) | carry(inIdx)) & mask(idx))
-			fmt.Printf("Before e.buf[idx:%d] = 0x%X\n", idx,e.buf[idx])
 			e.buf[idx] |= ((inBuf[inIdx] >> shift) | carry(inIdx)) & mask(idx)
-			fmt.Printf("After  e.buf[idx:%d] = 0x%X\n", idx,e.buf[idx])
 			idx++
 		}
-		fmt.Println("RIGHT AFter loop ")
-		fmt.Println("inIdx: ", inIdx)
-		fmt.Println("idx: ", idx)
 		if ((e.bitCounter + f.BitSize) % 8) > 0 {
 			e.buf[idx] |= carry(inIdx)
 		}
 	}
 
-
-	fmt.Println("loop end ---")
-
         //now we should update buffer and bitCounter
-	fmt.Println("Updating ... ")
-
-	fmt.Println("Before -> BitCounter: ", e.bitCounter)
 	e.bitCounter = (e.bitCounter + f.BitSize) % 8
-	fmt.Println("After -> BitCounter: ", e.bitCounter)
 
 	// move the head to the next non-complete byte used
 	headerUpdate := func() uint8 {
@@ -203,10 +131,7 @@ func (e *encoder) writeBits(f field, inBuf []byte) {
 		}
 		return numBytes
 	}
-
-	fmt.Println("Header update: ", headerUpdate())
 	e.buf = e.buf[headerUpdate():]
-
 	return
 }
 
@@ -216,8 +141,6 @@ func (e *encoder) write8(f field, x uint8) {
 	b := make([]byte, typeSize)
 	b[0] = x
 	e.writeBits(f, b)
-	// e.buf[0] = x
-	// e.buf = e.buf[1:]
 }
 
 func (e *encoder) write16(f field, x uint16) {
@@ -227,9 +150,6 @@ func (e *encoder) write16(f field, x uint16) {
 	e.order.PutUint16(b[0:typeSize], x)
 
 	e.writeBits(f, b)
-
-	// e.order.PutUint16(e.buf[0:2], x)
-	// e.buf = e.buf[2:]
 }
 
 func (e *encoder) write32(f field, x uint32) {
@@ -239,9 +159,6 @@ func (e *encoder) write32(f field, x uint32) {
 	e.order.PutUint32(b[0:typeSize], x)
 
 	e.writeBits(f, b)
-
-	// e.order.PutUint32(e.buf[0:4], x)
-	// e.buf = e.buf[4:]
 }
 
 func (e *encoder) write64(f field, x uint64) {
@@ -251,9 +168,6 @@ func (e *encoder) write64(f field, x uint64) {
 	e.order.PutUint64(b[0:typeSize], x)
 
 	e.writeBits(f, b)
-
-	// e.order.PutUint64(e.buf[0:8], x)
-	// e.buf = e.buf[8:]
 }
 
 func (e *encoder) writeS8(f field, x int8) { e.write8(f, uint8(x)) }
@@ -347,27 +261,6 @@ func (e *encoder) write(f field, v reflect.Value) {
 		e.struc = v
 		e.sfields = cachedFieldsFromStruct(f.Type)
 		l := len(e.sfields)
-		fmt.Println("22")
-		// if e.realSize == 0 {
-		// 	for idx, fld := range e.sfields {
-		// 		if fld.BitSize == 0 {
-		// 			e.realSize += uint64(fld.Type.Size()) * 8
-		// 		} else {
-		// 			e.realSize += uint64(fld.BitSize)
-		// 		}
-		// 		fmt.Println("idx:", idx, " realSize:", e.realSize)
-		// 	}
-		//
-		// 	if (e.realSize % 8) != 0 {
-		// 		e.realSize = 1 + (e.realSize / 8)
-		// 	} else {
-		// 		e.realSize = (e.realSize / 8)
-		// 	}
-		// 	if uint64(len(e.buf)) != e.realSize {
-		// 		fmt.Println("Changing buffer len : from->to", len(e.buf), e.realSize)
-		// 		e.assignBuffer(make([]byte, e.realSize))
-		// 	}
-		// }
 		for i := 0; i < l; i++ {
 			f := e.sfields[i]
 			v := v.Field(f.Index)
